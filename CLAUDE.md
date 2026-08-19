@@ -102,8 +102,8 @@ PWA mobile-first para médicos registarem actos operatórios e reconciliarem com
 - Parser PDF: extrai `procedimento` (nome do Acto Médico, coluna direita) para cada `cufLine` — threshold dinâmico 52% da largura da página, janela Y ±18px (ou ±35px se vazio); campo disponível em `_pendingCUF.cufLines[n].procedimento` (commit db740fd)
 - Reconciliação: após aplicar, mostra "X doentes em falta" a vermelho se houver em_falta não resolvidos
 - Reconciliação: `totalRecuperado` conta só `reclamado→pago` (não registado→pago)
-- Reclamados: mostra só `reclamado` pendentes (pagos removidos da lista após confirmação)
-- Cruzar dados: lista em dívida mostra só `em_falta` (reclamados não aparecem aqui — já estão no tab Reclamados); textarea de reclamação contém só lista de doentes (sem saudação/despedida — utilizador escreve livremente)
+- Reclamados: mostra `em_falta` (bloco "Actos em dívida", topo) seguido de `reclamado` pendentes (pagos removidos da lista após confirmação) — bloco em dívida movido para aqui (2026-08-19, commit ae861d7); Cruzar dados fica só com o resumo do que foi aplicado, sem a lista. `buildDebtBlockHTML()` devolve HTML (já não escreve directo no DOM via `renderDebtBlock()`), chamada por `renderPagamentos()`
+- Cruzar dados: textarea de reclamação contém só lista de doentes (sem saudação/despedida — utilizador escreve livremente)
 - Demo mode: 3 casos no Painel de Confirma — FERNANDO SANTOS PEREIRA (tolerância 1:1), HÉLDER RODRIGUES BAPTISTA (tolerância 1:1 diff=1d), BEATRIZ MARTA SOUSA (fuzzy NP off-by-one simNp=86%); linha de consulta na fatura simulada; todos os registos com `valor` preenchido; campo `procedimento` extraído das linhas CUF pelo fallback de código de especialidade
 - Calendário com espaçamentos corrigidos
 - Swipe lateral no calendário: dedo segue com `translateX` durante drag; no `touchend` mês actual anima para fora e novo mês entra do lado oposto (`transition: transform 300ms`); `touch-action: pan-y` evita conflito com scroll vertical
