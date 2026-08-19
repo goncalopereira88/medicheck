@@ -80,7 +80,8 @@ PWA mobile-first para médicos registarem actos operatórios e reconciliarem com
 - Registo de actos
 - OCR via foto (anestesia) — extrai nº processo (só dígitos) e seguradora
 - Reconciliação com listagem CUF (upload/paste PDF ou texto) — inclui 3ª via: actos `registado` que aparecem na fatura passam directamente a `pago` (fix Gap 1, commit f7f975d)
-- Parser PDF suporta formato real CUF actual: data ISO `YYYY-MM-DD`, NP entre `[ ]` (qualquer comprimento 6-9 dígitos), estornos negativos ignorados, nomes extraídos só de palavras em CAPS (commit 2301549, 2026-06-10)
+- **Parser PDF lê o extracto CUF por colunas** (2026-08-19): as colunas do extracto são *centradas*, não alinhadas — bandas de x fixas falham. O pdf.js emite itens de espaço em branco entre colunas; `cufRowsFromItems()` parte cada linha nesses separadores e devolve as células na ordem `DATA | PACIENTE | SERVIÇO | ACTO MÉDICO | UNIDADE | EFR | REGRA | VALOR [| OBS]`. O NP e o nome do doente vêm na mesma célula (`[ 31316706 ] Gonçalo Silva`). `parseCUFColunas()` constrói as `cufLines` a partir daí e devolve `false` se as células não baterem certo — nesse caso corre o parser de texto de sempre. **Nunca extrair o nome filtrando por MAIÚSCULAS**: nos extractos actuais o nome vem em Title Case e esse filtro devolvia a seguradora (`HTVD ADSE VF`), matando a Fase 3 do matching
+- Parser PDF: caminho de texto mantido para formato legado (`DD-MM-YY` + NP livre, nomes em CAPS) e para o demo mode — `processCUFText` aceita ambos (commit 2301549, 2026-06-10)
 - Parser PDF: fallback para formato legado `DD-MM-YY` + NP livre (faturas antigas). Validado contra 3 PDFs reais históricos (270 actos) — sessão 2026-04-25; formato actual validado em Jun 2026
 - Status flow: Registado → Em Falta → Reclamado → Pago
 - Regra dos 3 meses para marcar "Em Falta" — clock temporal autónomo (`checkEmFaltaByTime()`) corre ao entrar com PIN e ao abrir separador "Cruzar dados"
@@ -162,6 +163,9 @@ PWA mobile-first para médicos registarem actos operatórios e reconciliarem com
 | 1 | IP local `192.168.1.186:8000` como authorized origin no GCP para testes iPhone | Baixa |
 | ~~2~~ | ~~Validação de integridade no merge localStorage↔Drive — dado corrompido em local propaga para Drive sem aviso~~ | ~~Médio~~ — ✅ feito (5502de1) |
 | 3 | Export/backup manual do `medicheck_v2.enc` — ficheiro em `appDataFolder` invisível na UI Drive; recuperação sem API impossível para o utilizador | Baixo |
+| 4 | **Estornos e reprocessamentos** — a CUF estorna uma linha (valor negativo) e volta a facturá-la noutro valor, por vezes noutro extracto. Hoje os negativos são ignorados e o acto ou fica eternamente `em_falta` (ALCINO PATRÍCIO: −260€ seguido de 0.00€ com OBS `AC`) ou fica `pago` pelo valor antigo (NUNO JORGE, NP 7529406: Maio paga 157,26€, Junho estorna e repaga 149,52€ — o registo já está `pago` e é saltado). Precisa de estado/tratamento próprio | Alta |
+| 5 | **Grupos n:m do mesmo doente no mesmo dia não são ambiguidade** — são várias linhas de facturação do mesmo acto (principal + acessório). O Painel de Confirma obriga a escolher uma e ignorar as outras, o que **subestima o valor recebido**. Deviam ser somadas. 7 grupos nos extractos de Maio/Junho | Alta |
+| 6 | Acto pago pela CUF com serviço `Anestesiologia` mas registado na BD como acto de equipa (JORGE BATISTA VIEIRA) — o filtro exclui a linha e o acto fica como falso "em falta". Devia ser mostrado, não perdido | Média |
 
 ---
 
@@ -224,9 +228,20 @@ A chave Gemini não é exposta no cliente. O Worker faz a chamada à API.
 
 ---
 
-## RISCO CRÍTICO ACTIVO
+## RISCO CRÍTICO — FECHADO (2026-08-19)
 
-**Matching BD↔fatura nunca testado com dados reais.** Parser foi validado contra 3 PDFs históricos da CUF (sessão 2026-04-25, 270 actos extraídos correctamente), mas o **matching** propriamente dito não pôde ser testado: os PDFs históricos têm NPs de 6 dígitos (sistema antigo), a BD tem 7-9 dígitos (sistema novo). Em Junho/Julho convergem — é aí que se valida o matching.
+**O matching BD↔fatura foi finalmente testado com dados reais e funciona.** Extractos HTVD de Maio e Junho 2026 (232 linhas, 163 elegíveis, €25.682,07) contra a BD de 19-08 (293 actos):
+
+- Fase 1 exacto NP+data 1:1 — **143 linhas (87,7%), €22.225,08, automático**
+- Fase 1 ambíguo n:m — 7 grupos / 16 linhas
+- Fase 2 tolerância ±7d — 0 casos
+- Fase 3 fuzzy — 3 casos, todos correctos
+- Sem match — 1 linha (acto pago que nunca foi registado na BD)
+- **56 dos 63 actos "Em falta" resolvidos = €10.998,42**
+
+Os NPs convergiram como previsto (7-9 dígitos dos dois lados). Os 3 casos fuzzy são todos NP errado num dígito — em dois deles a BD tem um `9` inicial a mais (provável erro de OCR da vinheta).
+
+**Validação futura:** usar sempre a bancada de ensaio offline (parser + matching corridos fora da app) antes de tocar no parser. O oráculo é o quadro RESUMO no topo de cada extracto — se o parser não reproduzir aquelas quantidades e valores ao cêntimo, leu mal.
 
 Melhorias implementadas (sessão 2026-04-25, commit 0c45a15):
 1. ✅ Confirmação de nome: preview mostra BD vs CUF com alerta amber se Jaccard < 50%
