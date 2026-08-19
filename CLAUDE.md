@@ -163,8 +163,8 @@ PWA mobile-first para médicos registarem actos operatórios e reconciliarem com
 | 1 | IP local `192.168.1.186:8000` como authorized origin no GCP para testes iPhone | Baixa |
 | ~~2~~ | ~~Validação de integridade no merge localStorage↔Drive — dado corrompido em local propaga para Drive sem aviso~~ | ~~Médio~~ — ✅ feito (5502de1) |
 | 3 | Export/backup manual do `medicheck_v2.enc` — ficheiro em `appDataFolder` invisível na UI Drive; recuperação sem API impossível para o utilizador | Baixo |
-| 4 | **Estornos e reprocessamentos** — a CUF estorna uma linha (valor negativo) e volta a facturá-la noutro valor, por vezes noutro extracto. Hoje os negativos são ignorados e o acto ou fica eternamente `em_falta` (ALCINO PATRÍCIO: −260€ seguido de 0.00€ com OBS `AC`) ou fica `pago` pelo valor antigo (NUNO JORGE, NP 7529406: Maio paga 157,26€, Junho estorna e repaga 149,52€ — o registo já está `pago` e é saltado). Precisa de estado/tratamento próprio | Alta |
-| 5 | **Grupos n:m do mesmo doente no mesmo dia não são ambiguidade** — são várias linhas de facturação do mesmo acto (principal + acessório). O Painel de Confirma obriga a escolher uma e ignorar as outras, o que **subestima o valor recebido**. Deviam ser somadas. 7 grupos nos extractos de Maio/Junho | Alta |
+| 4 | **Estornos — um acto estornado deixa de estar pago.** A CUF emite uma linha negativa a anular um pagamento anterior. Hoje os negativos são descartados em silêncio, o acto fica preso em `pago` e nunca mais é reclamável. Caso real: ALCINO PATRÍCIO (NP 39768702, 2026-04-15) — −260€ seguido de 0.00€ com OBS `AC`. É uma questão de **estado**, não de valor. (O caso NUNO JORGE, NP 7529406, em que Maio paga 157,26€ e Junho estorna e repaga 149,52€, não é problema: pago continua pago) | Alta |
+| 5 | **Grupos n:m do mesmo doente no mesmo dia não são ambiguidade** — são várias linhas de facturação do mesmo acto (principal + acessório). Foi pago; não deviam abrir fila no Painel de Confirma. É limpeza de código, não decisão de produto. 7 grupos nos extractos de Maio/Junho | Alta |
 | 6 | Acto pago pela CUF com serviço `Anestesiologia` mas registado na BD como acto de equipa (JORGE BATISTA VIEIRA) — o filtro exclui a linha e o acto fica como falso "em falta". Devia ser mostrado, não perdido | Média |
 
 ---
@@ -201,6 +201,7 @@ Nome no UI: **"Confirma"** (internamente continua "desempate"). Resolve matches 
 
 ## DECISÕES DE PRODUTO TOMADAS
 
+- **Nesta fase o MediCheck é binário: pago ou não pago (decisão 2026-08-19).** O objectivo é apanhar os doentes que não foram pagos de todo. Os valores em euros não são objectivo e só entram quando existirem os **valores de K** para calcular o valor esperado de cada acto. Razão: o `valor` só é escrito quando a reconciliação encontra a linha na fatura — um acto só ganha valor quando é *pago* —, pelo que a app nunca consegue dizer quanto a CUF **deve**. Consequência directa: o cartão "em dívida" do Relatório soma valores de actos em falta, que são sempre nulos, e mostra sempre €0 — ou desaparece ou passa a contar actos em vez de euros. Divergências de cêntimos entre extractos não são prioridade
 - Match por nº processo, não por nome (CUF não confirma linha a linha)
 - Copy-paste é aceitável (CUF protege o Sheets contra download)
 - `pagos[]` mantido apesar de redundante — reservado para analytics/monetização futura
